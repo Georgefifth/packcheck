@@ -1,0 +1,16 @@
+{
+  "name": "packcheck",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/core.test.js",
+    "test:e2e": "node tests/firefox.mjs",
+    "start": "python3 -m http.server 8000 --bind 127.0.0.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "fflate": "^0.8.3",
+    "playwright": "^1.63.0"
+  }
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Prepare a submission ZIP from your local files. Check required paths, rename copies, and inspect exactly what will be packed.">
+  <title>PackCheck — Submission packager</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <a class="skip" href="#addFiles" data-i18n="skip">Skip to files</a>
+  <header><a class="brand" href="./"><span class="logo" aria-hidden="true">P↗</span>PackCheck<span class="tag" data-i18n="prototype">CORE PROTOTYPE</span></a><button id="lang" class="quiet" type="button">中文</button></header>
+  <main>
+    <div class="intro"><div><h1 data-i18n="heading">Prepare your submission ZIP.</h1><p data-i18n="intro">Add files, fix the package, download it. Originals stay untouched.</p></div><span class="local" data-i18n="local">Local processing · No account</span></div>
+    <div class="workspace">
+      <section class="files panel" aria-labelledby="filesTitle">
+        <div class="panel-head"><h2 id="filesTitle" data-i18n="files">Files to pack</h2><button class="quiet" id="demo" type="button" data-i18n="demo">Try a messy example</button></div>
+        <div id="drop" class="drop"><span class="drop-icon" aria-hidden="true">＋</span><p data-i18n="drop">Drop files here, or choose from your device</p><div class="actions"><button id="addFiles" type="button" data-i18n="addFiles">Add files</button><button id="addFolder" type="button" class="secondary" data-i18n="addFolder">Add folder</button></div><small data-i18n="capacity">Up to 300 files / 20 MiB. Folder imports omit the outer folder.</small></div>
+        <input id="fileInput" type="file" multiple hidden><input id="folderInput" type="file" webkitdirectory multiple hidden>
+        <p id="importStatus" class="status" role="status"></p>
+        <div id="empty" class="empty" data-i18n="empty">Your package is empty. Add the files you plan to submit.</div>
+        <div id="fileList" class="file-list"></div>
+        <div id="fileFooter" class="file-footer" hidden><span id="fileSummary"></span><div><button class="quiet" id="undo" type="button" hidden data-i18n="undo">Undo removal</button><button class="quiet danger" id="clear" type="button" data-i18n="clear">Clear files</button></div></div>
+      </section>
+      <aside id="package" class="output panel" tabindex="-1" aria-labelledby="outputTitle">
+        <div class="panel-head"><h2 id="outputTitle" data-i18n="output">Submission package</h2><span class="step">02</span></div>
+        <label for="archiveName" data-i18n="archiveName">ZIP filename</label><input id="archiveName" value="submission.zip" maxlength="150" spellcheck="false" aria-describedby="archiveHint"><small id="archiveHint" data-i18n="archiveHint">Use the name specified by your assignment.</small>
+        <label for="required" data-i18n="required">Required files or folders</label><textarea id="required" rows="4" spellcheck="false" placeholder="report.pdf&#10;README.md&#10;src/" aria-describedby="requiredHint"></textarea><small id="requiredHint" data-i18n="requiredHint">Optional. One exact path per line; end folders with /. Case matters.</small>
+        <label for="limit" data-i18n="limit">Maximum ZIP size (MiB)</label><input id="limit" type="number" min="0.001" step="any" placeholder="Optional" aria-describedby="limitHint"><small id="limitHint" data-i18n="limitHint">Checked against the actual compressed ZIP, not an estimate.</small>
+        <details class="package-options"><summary data-i18n="options">Package options</summary><label for="rootFolder" data-i18n="rootFolder">Outer folder inside ZIP</label><input id="rootFolder" maxlength="150" placeholder="Optional" spellcheck="false" aria-describedby="rootHint"><small id="rootHint" data-i18n="rootHint">Wrap all included files in this folder. Required paths above refer to its contents.</small><label for="compression" data-i18n="compression">Compression</label><select id="compression"><option value="1" data-i18n="fast">Fast</option><option value="6" data-i18n="balanced">Balanced</option><option value="9" data-i18n="compact">Smallest</option></select></details>
+        <div id="requirements" class="requirements"></div>
+        <div id="checks" class="checks" aria-live="polite"></div>
+        <button id="build" class="primary" type="button" disabled data-i18n="build">Build ZIP</button>
+        <p id="buildStatus" class="status" role="status"></p>
+        <button id="retryCompression" class="secondary" type="button" hidden data-i18n="retryCompression">Try stronger compression</button>
+        <div id="ready" class="ready" hidden><strong data-i18n="ready">ZIP built and reopened successfully</strong><p id="zipInfo"></p><a id="download" class="download" data-i18n="download">Download ZIP ↓</a><button id="manifest" class="quiet" type="button" data-i18n="manifest">Download file list</button></div>
+      </aside>
+    </div>
+    <nav class="mobile-package" aria-label="Package shortcut"><span id="mobileSummary"></span><a href="#package" data-i18n="jumpPackage">Package ↓</a></nav>
+    <details class="help"><summary data-i18n="help">What this prototype checks</summary><p data-i18n="scope">Exact required paths, duplicate names, unsafe paths, basic PDF/PNG/JPEG signatures, and the final ZIP size. It excludes common OS metadata and .git folders by default; you control inclusion. It does not grade work, convert formats, or submit to your course portal.</p><p data-i18n="privacy">Files remain in this tab and are cleared on refresh. Text previews are plain text. No analytics, storage, or file uploads.</p><p>ZIP: <a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener noreferrer">fflate (MIT)</a> · <a href="./RESEARCH.md" data-i18n="research">Research & prior art</a></p></details>
+  </main>
+  <dialog id="preview"><div class="dialog-head"><h2 id="previewTitle"></h2><button id="closePreview" class="quiet" type="button" data-i18n="close">Close</button></div><p id="previewNote"></p><pre id="previewText"></pre><img id="previewImage" alt=""><a id="openFile" class="download" target="_blank" rel="noopener noreferrer" data-i18n="open">Open original file ↗</a></dialog>
+  <noscript><p>This utility needs JavaScript to prepare ZIP files locally.</p></noscript>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
