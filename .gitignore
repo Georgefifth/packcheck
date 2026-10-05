@@ -2,3 +2,6 @@ node_modules/
 test-artifacts/
 *.log
 .DS_Store
+video/render/
+video/*.mp4
+video/qa/
