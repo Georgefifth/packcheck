@@ -34,12 +34,20 @@ async function audit(name) {
   await writeFile(join(output, 'accessibility.json'), JSON.stringify(audits, null, 2));
   assert.deepEqual(audits.at(-1).violations, []);
 }
+async function chooseFiles(button, files) {
+  const chooserEvent = page.waitForEvent('filechooser');
+  await page.locator(button).click();
+  await (await chooserEvent).setFiles(files);
+}
 const row = name => page.locator('.file-row').filter({ has: page.locator('.file-original', { hasText: name }) });
 try {
   await page.goto(base, { waitUntil: 'networkidle' });
   assert.equal(await page.locator('#build').isDisabled(), true);
   await page.keyboard.press('Tab'); assert.equal(await page.locator('.skip').evaluate(el => el === document.activeElement), true);
   await audit('empty desktop');
+  await page.locator('.help summary').click();
+  assert.equal(await page.locator('.help').getAttribute('open'), '');
+  await page.locator('.help summary').click();
   await page.locator('#demo').click();
   assert.equal(await page.locator('.file-row').count(), 4);
   assert.equal(await row('.DS_Store').locator('input[type=checkbox]').isChecked(), false);
@@ -57,6 +65,11 @@ try {
   await page.keyboard.press('Escape'); assert.equal(await page.locator('#preview').isVisible(), false);
   await row('report-final.pdf').getByRole('button', { name: /Preview:/ }).click();
   assert.match(await page.locator('#openFile').getAttribute('href'), /^blob:/);
+  // Headless Firefox downloads PDFs rather than keeping its viewer tab open.
+  const pdfDownloadEvent = page.waitForEvent('download');
+  await page.locator('#openFile').click();
+  const pdfDownload = await pdfDownloadEvent;
+  assert.equal((await readFile(await pdfDownload.path(), 'utf8')).slice(0, 8), '%PDF-1.4');
   await page.locator('#closePreview').click();
   await page.locator('#limit').fill('0.0001');
   await page.locator('#build').click();
@@ -123,7 +136,7 @@ try {
   await page.locator('#lang').click();
   await page.locator('#required').fill(''); await page.locator('#archiveName').fill('real-files.zip');
   await page.locator('#rootFolder').fill('');
-  await page.locator('#fileInput').setInputFiles([
+  await chooseFiles('#addFiles', [
     { name: 'hello.txt', mimeType: 'text/plain', buffer: Buffer.from('User-supplied text\n') },
     { name: 'fake.pdf', mimeType: 'application/pdf', buffer: Buffer.from('This is plain text') },
     { name: 'markup.html', mimeType: 'text/html', buffer: Buffer.from('<img src=x onerror="window.injected=true">') }
@@ -134,12 +147,18 @@ try {
   assert.equal(await page.locator('#previewText img').count(), 0);
   assert.equal(await page.evaluate(() => window.injected), undefined);
   assert.equal(await page.locator('#openFile').getAttribute('download'), 'markup.html');
+  const originalEvent = page.waitForEvent('download');
+  await page.locator('#openFile').click();
+  const original = await originalEvent;
+  assert.equal(original.suggestedFilename(), 'markup.html');
+  assert.equal(await readFile(await original.path(), 'utf8'), '<img src=x onerror="window.injected=true">');
+  await page.screenshot({ path: join(output, 'safe-text-preview.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await row('fake.pdf').getByRole('button', { name: /Remove:/ }).click();
   await page.locator('#undo').click();
   assert.equal(await row('fake.pdf').count(), 1);
   await row('fake.pdf').getByRole('button', { name: /Remove:/ }).click();
-  await page.locator('#fileInput').setInputFiles({ name: 'hello.txt', mimeType: 'text/plain', buffer: Buffer.from('Second version') });
+  await chooseFiles('#addFiles', { name: 'hello.txt', mimeType: 'text/plain', buffer: Buffer.from('Second version') });
   await page.waitForFunction(() => document.querySelectorAll('.file-row').length === 3);
   assert.match(await page.locator('#checks').innerText(), /Duplicate output path/);
   await page.locator('.file-row').last().locator('.path').fill('hello-v2.txt');
@@ -149,7 +168,7 @@ try {
   await mkdir(join(fixture, 'src'));
   await writeFile(join(fixture, 'src', 'entry.py'), 'print("folder")');
   await writeFile(join(fixture, '.DS_Store'), 'metadata');
-  await page.locator('#folderInput').setInputFiles(fixture);
+  await chooseFiles('#addFolder', fixture);
   await page.waitForFunction(() => document.querySelectorAll('.file-row').length === 5);
   assert.equal(await row('entry.py').locator('.path').inputValue(), 'src/entry.py');
   assert.equal(await row('.DS_Store').locator('input[type=checkbox]').isChecked(), false);
@@ -167,13 +186,64 @@ try {
   assert.equal(new TextDecoder().decode(realEntries['hello-v2.txt']), 'Second version');
   assert.equal(new TextDecoder().decode(realEntries['src/entry.py']), 'print("folder")');
   assert.equal(Object.keys(realEntries).some(name => name.includes('.DS_Store')), false);
+  await page.locator('#archiveName').fill('../unsafe.zip');
+  assert.equal(await page.locator('#build').isDisabled(), true);
+  await page.locator('#archiveName').fill('real-files.zip');
+  await page.locator('#rootFolder').fill('../unsafe');
+  assert.equal(await page.locator('#build').isDisabled(), true);
+  await page.locator('#rootFolder').fill('');
+  await page.locator('#compression').selectOption('6');
+  await page.locator('#build').click(); await page.locator('#download').waitFor({ state: 'visible' });
+  const balancedEvent = page.waitForEvent('download'); await page.locator('#download').click();
+  const balancedEntries = unzipSync(new Uint8Array(await readFile(await (await balancedEvent).path())));
+  assert.deepEqual(balancedEntries, realEntries);
   await page.locator('#fileInput').setInputFiles({ name: 'too-big.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(21 * 1024 * 1024) });
   await page.waitForFunction(() => /exceeds the prototype limit/.test(document.querySelector('#importStatus').textContent));
   assert.equal(await page.locator('.file-row').count(), 5);
   assert.equal(await page.locator('#ready').isVisible(), true);
+  page.once('dialog', dialog => dialog.dismiss()); await page.locator('#demo').click();
+  assert.equal(await page.locator('.file-row').count(), 5);
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#demo').click();
+  assert.equal(await page.locator('.file-row').count(), 4);
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#clear').click();
+  await page.locator('#required').fill('');
+  const png = Buffer.from(await page.evaluate(() => {
+    const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 180;
+    const paint = canvas.getContext('2d');
+    paint.fillStyle = '#1555d7'; paint.fillRect(0, 0, 320, 180);
+    paint.fillStyle = '#ffffff'; paint.font = '24px sans-serif'; paint.fillText('Local PNG preview', 35, 95);
+    return canvas.toDataURL('image/png').split(',')[1];
+  }), 'base64');
+  await chooseFiles('#addFiles', { name: 'pixel.png', mimeType: 'image/png', buffer: png });
+  await row('pixel.png').waitFor();
+  await row('pixel.png').getByRole('button', { name: /Preview:/ }).click();
+  await page.waitForFunction(() => document.querySelector('#previewImage').naturalWidth === 320);
+  await page.screenshot({ path: join(output, 'image-preview.png'), fullPage: true });
+  await page.locator('#closePreview').click();
+  const transfer = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.items.add(new File(['Dropped content'], 'dropped.txt', { type: 'text/plain' }));
+    return data;
+  });
+  await page.locator('#drop').dispatchEvent('dragover', { dataTransfer: transfer });
+  assert.equal(await page.locator('#drop').evaluate(el => el.classList.contains('over')), true);
+  await page.locator('#drop').dispatchEvent('drop', { dataTransfer: transfer });
+  await row('dropped.txt').waitFor();
+  assert.equal(await page.locator('.file-row').count(), 2);
+  await transfer.dispose();
+  await page.locator('#build').click(); await page.locator('#download').waitFor({ state: 'visible' });
+  const imageEvent = page.waitForEvent('download'); await page.locator('#download').click();
+  const finalEntries = unzipSync(new Uint8Array(await readFile(await (await imageEvent).path())));
+  assert.deepEqual(Buffer.from(finalEntries['pixel.png']), png);
+  assert.equal(new TextDecoder().decode(finalEntries['dropped.txt']), 'Dropped content');
   assert.deepEqual(await page.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
   await page.reload(); assert.equal(await page.locator('.file-row').count(), 0);
   assert.deepEqual(errors, []); assert.deepEqual(external, []);
-  console.log('PASS PackCheck Firefox: real files/folder, fixes, previews, ZIP bytes, size limit, manifest, language, mobile, content safety, privacy, accessibility');
+  await writeFile(join(output, 'result.json'), JSON.stringify({
+    result: 'PASS', browser: 'Firefox', version: browser.version(), headless: true,
+    base, testedAt: new Date().toISOString(), runtimeErrors: errors, externalRequests: external,
+    accessibilityAudits: audits, screenshots: ['messy-desktop.png', 'ready-desktop.png', 'ready-mobile-zh.png', 'safe-text-preview.png', 'image-preview.png']
+  }, null, 2));
+  console.log('PASS PackCheck Firefox: file/folder buttons and pickers, drag/drop, fixes, text/image previews, original download, ZIP bytes, compression, size limit, manifest, language, mobile, undo, confirmation dialogs, help, content safety, privacy, accessibility');
   console.log(`Artifacts: ${output}`);
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
