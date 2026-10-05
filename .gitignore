@@ -5,3 +5,4 @@ test-artifacts/
 video/render/
 video/*.mp4
 video/qa/
+submission/*.zip
